@@ -231,11 +231,11 @@ void FSLMetaDBHandler::WriteFirstDocument(const FString& InTaskDescription)
 {
 #if SL_WITH_LIBMONGO_C
 	// Create the environment and task description document
-	bson_oid_t oid;
+	//bson_oid_t oid;
 	bson_t* doc = bson_new();
 
-	bson_oid_init(&oid, NULL);
-	BSON_APPEND_OID(doc, "_id", &oid);
+	//bson_oid_init(&oid, NULL);
+	//BSON_APPEND_OID(doc, "_id", &oid);
 
 	// Add data to the document
 	AddTaskDescription(InTaskDescription, doc);
@@ -334,7 +334,7 @@ void FSLMetaDBHandler::AddScanPoseEntry(const FSLScanPoseData& ScanPoseData)
 		bson_uint32_to_string(img_arr_idx, &img_key, img_key_str, sizeof img_key_str);
 		BSON_APPEND_DOCUMENT_BEGIN(&scan_img_arr, img_key, &scan_img_arr_obj);
 		BSON_APPEND_UTF8(&scan_img_arr_obj, "type", TCHAR_TO_UTF8(*Pair.Key));
-		BSON_APPEND_OID(&scan_img_arr_obj, "file_id", (const bson_oid_t*)&file_oid);
+		//BSON_APPEND_OID(&scan_img_arr_obj, "file_id", (const bson_oid_t*)&file_oid);
 		bson_append_document_end(&scan_img_arr, &scan_img_arr_obj);
 		img_arr_idx++;
 	}
@@ -765,13 +765,13 @@ void FSLMetaDBHandler::AddPoseDoc(const FVector& InLoc, const FQuat& InQuat, bso
 	bson_t child_obj_loc;
 	bson_t child_obj_rot;
 
-	BSON_APPEND_DOCUMENT_BEGIN(doc, "loc", &child_obj_loc);
+	BSON_APPEND_DOCUMENT_BEGIN(doc, "translation", &child_obj_loc); //was loc
 	BSON_APPEND_DOUBLE(&child_obj_loc, "x", InLoc.X);
 	BSON_APPEND_DOUBLE(&child_obj_loc, "y", InLoc.Y);
 	BSON_APPEND_DOUBLE(&child_obj_loc, "z", InLoc.Z);
 	bson_append_document_end(doc, &child_obj_loc);
 
-	BSON_APPEND_DOCUMENT_BEGIN(doc, "rot", &child_obj_rot);
+	BSON_APPEND_DOCUMENT_BEGIN(doc, "rotation", &child_obj_rot); //was rot
 	BSON_APPEND_DOUBLE(&child_obj_rot, "x", InQuat.X);
 	BSON_APPEND_DOUBLE(&child_obj_rot, "y", InQuat.Y);
 	BSON_APPEND_DOUBLE(&child_obj_rot, "z", InQuat.Z);

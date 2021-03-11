@@ -7,6 +7,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Components/StaticMeshComponent.h"
 
+#define SL_WITH_EYE_TRACKING false
+
 #if SL_WITH_EYE_TRACKING
 #include "SLGazeProxy.h"
 #endif // SL_WITH_EYE_TRACKING

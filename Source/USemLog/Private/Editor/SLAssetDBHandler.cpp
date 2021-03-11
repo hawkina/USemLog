@@ -532,7 +532,7 @@ bool FSLAssetDBHandler::WriteFilesToDocument(TMap<FString, FString> Files)
 	file_id = bson_new();
 
 	bson_oid_init(&oid, NULL);
-	BSON_APPEND_OID(document, "_id", &oid);
+	//BSON_APPEND_OID(document, "_id", &oid);
 
 	BSON_APPEND_ARRAY_BEGIN(document, "files", files);
 	for (auto& Elem : Files)
@@ -541,7 +541,7 @@ bool FSLAssetDBHandler::WriteFilesToDocument(TMap<FString, FString> Files)
 		bson_oid_t id;
 		char* id_string = TCHAR_TO_ANSI(*Elem.Key);
 		bson_oid_init_from_string(&id, id_string);
-		BSON_APPEND_OID(file_id, "file_id", &id);
+		//BSON_APPEND_OID(file_id, "file_id", &id);
 		BSON_APPEND_UTF8(file_id, "path", TCHAR_TO_UTF8(*Elem.Value));
 		bson_append_document_end(files, file_id);
 	}

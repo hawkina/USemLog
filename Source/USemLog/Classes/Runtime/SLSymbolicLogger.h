@@ -87,6 +87,12 @@ protected:
 	TSharedPtr<FSLOwlExperiment> CreateEventsDocTemplate(
 		ESLOwlExperimentTemplate TemplateType, const FString& InDocId);
 
+	//retunrs the individuals associated with an event, if they exist.
+	//Ev = EventString
+	//Indiv1 = first Individual
+	//Indiv1Class = Class of first Individual
+	void GetIndividuals(FString Ev, FString &Indiv1, FString &Indiv2, FString &Indiv1Class, FString &Indiv2Class);
+
 private:
 	// Get the reference or spawn a new initialized individual manager
 	bool SetIndividualManager();

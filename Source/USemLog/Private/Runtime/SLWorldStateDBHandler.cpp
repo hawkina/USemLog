@@ -10,6 +10,8 @@
 #include "Individuals/Type/SLVirtualBoneIndividual.h"
 #include "Individuals/Type/SLRobotIndividual.h"
 
+#include "Misc/DateTime.h"
+
 // UUtils
 #if SL_WITH_ROS_CONVERSIONS
 #include "Conversions.h"
@@ -17,6 +19,10 @@
 
 /* DB Write Async Task */
 // Init task
+
+//init seq
+int seq = 0;
+
 #if SL_WITH_LIBMONGO_C
 bool FSLWorldStateDBWriterAsyncTask::Init(mongoc_collection_t* in_collection, ASLIndividualManager* Manager, float PoseTolerance, bool bInWriteSparse)
 {
@@ -55,7 +61,7 @@ int32 FSLWorldStateDBWriterAsyncTask::FirstWrite()
 	bson_t* ws_doc;
 	ws_doc = bson_new();
 
-	AddTimestamp(ws_doc);
+	//AddTimestamp(ws_doc);
 
 	Num += AddAllIndividuals(ws_doc);
 	Num += AddSkeletalIndividals(ws_doc);
@@ -94,7 +100,7 @@ int32 FSLWorldStateDBWriterAsyncTask::WriteSparse()
 	bson_t* ws_doc;
 	ws_doc = bson_new();
 
-	AddTimestamp(ws_doc);
+	//AddTimestamp(ws_doc);
 
 	Num += AddIndividualsThatMoved(ws_doc);
 	Num += AddSkeletalIndividals(ws_doc);
@@ -123,7 +129,7 @@ int32 FSLWorldStateDBWriterAsyncTask::WriteAll()
 	bson_t* ws_doc;
 	ws_doc = bson_new();
 
-	AddTimestamp(ws_doc);
+	//AddTimestamp(ws_doc);
 
 	Num += AddAllIndividuals(ws_doc);
 	Num += AddSkeletalIndividals(ws_doc);
@@ -146,17 +152,18 @@ int32 FSLWorldStateDBWriterAsyncTask::WriteAll()
 // Add timestamp to the bson doc
 void FSLWorldStateDBWriterAsyncTask::AddTimestamp(bson_t* doc)
 {
-	BSON_APPEND_DOUBLE(doc, "timestamp", Timestamp);
+	//BSON_APPEND_DOUBLE(doc, "timestamp", Timestamp);
+	bson_append_now_utc(doc, "stamp", -1);
 }
 
 // Add all individuals (return the number of individuals added)
 int32 FSLWorldStateDBWriterAsyncTask::AddAllIndividuals(bson_t* doc)
 {
 	int32 Num = 0;
-	bson_t arr_obj;
+	//bson_t arr_obj;
 	uint32_t arr_idx = 0;
 
-	BSON_APPEND_ARRAY_BEGIN(doc, "individuals", &arr_obj);
+	//BSON_APPEND_ARRAY_BEGIN(doc, "individuals", &arr_obj);
 	for (const auto& Individual : IndividualManager->GetIndividuals())
 	{
 		//Individual->UpdateCachedPose(0.0);
@@ -164,22 +171,42 @@ int32 FSLWorldStateDBWriterAsyncTask::AddAllIndividuals(bson_t* doc)
 		//// TODO workaround
 		//Individual->SetHasMovedFlag(true);
 
-		bson_t individual_obj;
-		char idx_str[16];
-		const char* idx_key;
+		//add header
 
-		bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
-		BSON_APPEND_DOCUMENT_BEGIN(&arr_obj, idx_key, &individual_obj);
+		bson_t header;
+
+		BSON_APPEND_DOCUMENT_BEGIN(doc, "header", &header);
+			
+			BSON_APPEND_INT32(&header, "seq", seq);
+			seq = seq + 1;
+			bson_append_now_utc(&header, "stamp", -1);
+			BSON_APPEND_UTF8(&header, "frame_id", "map");
+			
+		bson_append_document_end(doc, &header);
+		//end header
+
+		//bson_t individual_obj;
+		//char idx_str[16];
+		//const char* idx_key;
+		//for tf
+		BSON_APPEND_UTF8(doc, "child_frame_id", TCHAR_TO_UTF8(*Individual->GetParentActor()->GetHumanReadableName()));	//was GetIdValue	
+
+		//bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
+		//BSON_APPEND_DOCUMENT_BEGIN(&arr_obj, idx_key, &individual_obj);
 			// Id
-			BSON_APPEND_UTF8(&individual_obj, "id", TCHAR_TO_UTF8(*Individual->GetIdValue()));			
+			//BSON_APPEND_UTF8(&individual_obj, "child_frame_id", TCHAR_TO_UTF8(*Individual->GetParentActor()->GetHumanReadableName()));	//was GetIdValue		
 			// Pose
-			AddPose(Individual->GetCachedPose(), &individual_obj);
-		bson_append_document_end(&arr_obj, &individual_obj);
+		AddPose(Individual->GetCachedPose(), doc);
+		//bson_append_document_end(&arr_obj, &individual_obj);
 
+		bson_append_now_utc(doc, "__recorded", -1);
+		BSON_APPEND_UTF8(doc, "topic", "tf");
 		arr_idx++;
 		Num++;
+
+		//bson_append_document_end(doc, &arr_obj);
 	}
-	bson_append_array_end(doc, &arr_obj);
+	//bson_append_array_end(doc, &arr_obj);
 	return Num;
 }
 
@@ -188,10 +215,10 @@ int32 FSLWorldStateDBWriterAsyncTask::AddIndividualsThatMoved(bson_t* doc)
 {
 	int32 Num = 0;
 
-	bson_t individuals_arr;
+	//bson_t individuals_arr;
 	uint32_t arr_idx = 0;
 
-	BSON_APPEND_ARRAY_BEGIN(doc, "individuals", &individuals_arr);
+	//BSON_APPEND_ARRAY_BEGIN(doc, "individuals", &individuals_arr);
 	for (const auto& Individual : IndividualManager->GetIndividuals())
 	{
 		if (Individual->UpdateCachedPose(MinPoseDiff))
@@ -199,23 +226,38 @@ int32 FSLWorldStateDBWriterAsyncTask::AddIndividualsThatMoved(bson_t* doc)
 			//// TODO workaround
 			//Individual->SetHasMovedFlag(true);
 
-			bson_t individual_obj;
-			char idx_str[16];
-			const char* idx_key;
+			//add header
+			bson_t header;
 
-			bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
-			BSON_APPEND_DOCUMENT_BEGIN(&individuals_arr, idx_key, &individual_obj);
+				BSON_APPEND_DOCUMENT_BEGIN(doc, "header", &header);
+					BSON_APPEND_INT32(&header, "seq", seq);
+					seq = seq + 1;
+					bson_append_now_utc(&header, "stamp", -1);
+					BSON_APPEND_UTF8(&header, "frame_id", "map");
+				bson_append_document_end(doc, &header);
+			//end header
+
+			//bson_t individual_obj;
+			//char idx_str[16];
+			//const char* idx_key;
+
+			//bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
+			//BSON_APPEND_DOCUMENT_BEGIN(&individual, idx_key, &individual_obj);
 				// Id
-				BSON_APPEND_UTF8(&individual_obj, "id", TCHAR_TO_UTF8(*Individual->GetIdValue()));
+			BSON_APPEND_UTF8(doc, "child_frame_id", TCHAR_TO_UTF8(*Individual->GetParentActor()->GetHumanReadableName())); //GetIdValue
 				// Pose
-				AddPose(Individual->GetCachedPose(), &individual_obj);
-			bson_append_document_end(&individuals_arr, &individual_obj);
+			AddPose(Individual->GetCachedPose(), doc);
 
+			//bson_append_document_end(&individual, &individual_obj);
+
+			bson_append_now_utc(doc, "__recorded", -1);
+			BSON_APPEND_UTF8(doc, "topic", "tf");
+			//bson_append_document_end(doc, &individual);
 			arr_idx++;
 			Num++;
 		}
 	}
-	bson_append_array_end(doc, &individuals_arr);
+	//bson_append_array_end(doc, &individuals_arr);
 	return Num;
 }
 
@@ -223,39 +265,54 @@ int32 FSLWorldStateDBWriterAsyncTask::AddIndividualsThatMoved(bson_t* doc)
 int32 FSLWorldStateDBWriterAsyncTask::AddSkeletalIndividals(bson_t* doc)
 {
 	int32 Num = 0;
-	bson_t arr_obj;
+	//bson_t arr_obj;
 	uint32_t arr_idx = 0;
 
-	BSON_APPEND_ARRAY_BEGIN(doc, "skel_individuals", &arr_obj);
+	//BSON_APPEND_ARRAY_BEGIN(doc, "skeletal_individuals", &arr_obj);
 	for (const auto& SkelIndividual : IndividualManager->GetSkeletalIndividuals())
 	{
 		//// Check if it was marked as "moved" by the previous iterator function
 		//if (SkelIndividual->HasMovedFlagSet())
 		//{
 		//	SkelIndividual->SetHasMovedFlag(false);
+			//bson_t individual_obj;
+			//char idx_str[16];
+			//const char* idx_key;
+			bson_t header;
+			//bson_t individual;
 
-			bson_t individual_obj;
-			char idx_str[16];
-			const char* idx_key;
+			//BSON_APPEND_DOCUMENT_BEGIN(doc, "", &individual);
 
-			bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
-			BSON_APPEND_DOCUMENT_BEGIN(&arr_obj, idx_key, &individual_obj);
+			BSON_APPEND_DOCUMENT_BEGIN(doc, "header", &header);
+				BSON_APPEND_INT32(&header, "seq", seq);
+				seq = seq + 1;
+				bson_append_now_utc(&header, "stamp", -1);
+				BSON_APPEND_UTF8(&header, "frame_id", "map");
+			bson_append_document_end(doc, &header);
+
+
+			//bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
+			//BSON_APPEND_DOCUMENT_BEGIN(&individual, idx_key, &individual_obj);
 				// Id
-				BSON_APPEND_UTF8(&individual_obj, "id", TCHAR_TO_UTF8(*SkelIndividual->GetIdValue()));
+			BSON_APPEND_UTF8(doc, "child_frame_id", TCHAR_TO_UTF8(*SkelIndividual->GetParentActor()->GetHumanReadableName())); // was GetIdValue
 				// Pose
-				AddPose(SkelIndividual->GetCachedPose(), &individual_obj);
+			AddPose(SkelIndividual->GetCachedPose(), doc);
 				// Bones
-				AddSkeletalBoneIndividuals(SkelIndividual->GetBoneIndividuals(), SkelIndividual->GetVirtualBoneIndividuals(),
-					&individual_obj);
+				//AddSkeletalBoneIndividuals(SkelIndividual->GetBoneIndividuals(), SkelIndividual->GetVirtualBoneIndividuals(),
+				//	&individual_obj);
 				// Constraints
 				//AddSkeletalConstraintIndividuals(SkelIndividual->GetBoneConstraintIndividuals(), &individual_obj);
-			bson_append_document_end(&arr_obj, &individual_obj);
+			bson_append_now_utc(doc, "__recorded", -1);
+			BSON_APPEND_UTF8(doc, "topic", "tf");
+			//bson_append_document_end(doc, &individual);
 
+			AddSkeletalBoneIndividuals(SkelIndividual->GetBoneIndividuals(), SkelIndividual->GetVirtualBoneIndividuals(),
+				doc);
 			arr_idx++;
 			Num++;
 		//}
 	}
-	bson_append_array_end(doc, &arr_obj);
+	//bson_append_array_end(doc, &arr_obj);
 	return Num;
 }
 
@@ -265,40 +322,58 @@ void FSLWorldStateDBWriterAsyncTask::AddSkeletalBoneIndividuals(
 	const TArray<USLVirtualBoneIndividual*>& VirtualBoneIndividuals,
 	bson_t* doc)
 {
-	bson_t bones_arr;
-	bson_t arr_obj;
-	char idx_str[16];
-	const char* idx_key;
+	//bson_t bones_arr;
+	//bson_t arr_obj;
+	//char idx_str[16];
+	//const char* idx_key;
 	uint32_t arr_idx = 0;
 
-	BSON_APPEND_ARRAY_BEGIN(doc, "bones", &bones_arr);
+	//BSON_APPEND_ARRAY_BEGIN(doc, "bones", &bones_arr);
 
 	for (const auto& BI : BoneIndividuals)
-	{
-		bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
-		BSON_APPEND_DOCUMENT_BEGIN(&bones_arr, idx_key, &arr_obj);
+	{	
+
+		bson_t header;
+
+		//BSON_APPEND_DOCUMENT_BEGIN(doc, "", &bone);
+		
+		BSON_APPEND_DOCUMENT_BEGIN(doc, "header", &header);
+			BSON_APPEND_INT32(&header, "seq", seq);
+			seq = seq + 1;
+			bson_append_now_utc(&header, "stamp", -1);
+			BSON_APPEND_UTF8(&header, "frame_id", "map");
+		bson_append_document_end(doc, &header);
+
+		//bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
+		//BSON_APPEND_DOCUMENT_BEGIN(&bones_arr, idx_key, &arr_obj);
 			// Bone index
-			BSON_APPEND_INT32(&arr_obj, "idx", BI->GetBoneIndex());
+			//BSON_APPEND_INT32(doc, "bone_index", BI->GetBoneIndex());
+			// Bone Name
+		BSON_APPEND_UTF8(doc, "child_frame_id", TCHAR_TO_UTF8(*BI->GetParentActor()->GetHumanReadableName()));
 			// Bone world pose
-			AddPose(BI->GetCachedPose(), &arr_obj);
-		bson_append_document_end(&bones_arr, &arr_obj);
+		AddPose(BI->GetCachedPose(), doc);
+		//bson_append_document_end(&bones_arr, &arr_obj);
+		//bson_append_document_end(doc, &bone);
 		arr_idx++;
 	}
 
-	for (const auto& VBI : VirtualBoneIndividuals)
-	{
-		bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
-		BSON_APPEND_DOCUMENT_BEGIN(&bones_arr, idx_key, &arr_obj);
-			// Bone index
-			BSON_APPEND_INT32(&arr_obj, "idx", VBI->GetBoneIndex());
-			// Bone world pose
-			AddPose(VBI->GetCachedPose(), &arr_obj);
-		bson_append_document_end(&bones_arr, &arr_obj);
-		arr_idx++;
-	}
+	//Ignoring virtual Bones for now. 
+	//for (const auto& VBI : VirtualBoneIndividuals)
+	//{
+	//	bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
+	//	BSON_APPEND_DOCUMENT_BEGIN(&bones_arr, idx_key, &arr_obj);
+	//		// Bone index
+	//		BSON_APPEND_INT32(&arr_obj, "virtual_bone_index", VBI->GetBoneIndex());
+	//		// Bone Name
+	//		BSON_APPEND_UTF8(&arr_obj, "child_frame_id", TCHAR_TO_UTF8(*VBI->GetParentActor()->GetHumanReadableName()));
+	//		// Bone world pose
+	//		AddPose(VBI->GetCachedPose(), &arr_obj);
+	//	bson_append_document_end(&bones_arr, &arr_obj);
+	//	arr_idx++;
+	//}
 
 
-	bson_append_array_end(doc, &bones_arr);
+	//bson_append_array_end(doc, &bones_arr);
 }
 
 // Add skeletal bone constraints to the document
@@ -329,7 +404,7 @@ int32 FSLWorldStateDBWriterAsyncTask::AddRobotIndividuals(bson_t* doc)
 			bson_uint32_to_string(arr_idx, &idx_key, idx_str, sizeof idx_str);
 			BSON_APPEND_DOCUMENT_BEGIN(&arr_obj, idx_key, &individual_obj);
 				// Id
-				BSON_APPEND_UTF8(&individual_obj, "id", TCHAR_TO_UTF8(*RoboIndividual->GetIdValue()));
+				BSON_APPEND_UTF8(&individual_obj, "id", TCHAR_TO_UTF8(*RoboIndividual->GetParentActor()->GetHumanReadableName())); //GetIdValue
 				// Pose
 				AddPose(RoboIndividual->GetCachedPose(), &individual_obj);
 
@@ -356,49 +431,53 @@ void FSLWorldStateDBWriterAsyncTask::AddPose(FTransform Pose, bson_t* doc)
 
 	bson_t child_obj_loc;
 	bson_t child_obj_rot;
+	bson_t child_obj_trans;
 
-	BSON_APPEND_DOCUMENT_BEGIN(doc, "loc", &child_obj_loc);
+	BSON_APPEND_DOCUMENT_BEGIN(doc, "transform", &child_obj_trans);
+
+	BSON_APPEND_DOCUMENT_BEGIN(&child_obj_trans, "translation", &child_obj_loc);
 	BSON_APPEND_DOUBLE(&child_obj_loc, "x", Pose.GetLocation().X);
 	BSON_APPEND_DOUBLE(&child_obj_loc, "y", Pose.GetLocation().Y);
 	BSON_APPEND_DOUBLE(&child_obj_loc, "z", Pose.GetLocation().Z);
-	bson_append_document_end(doc, &child_obj_loc);
+	bson_append_document_end(&child_obj_trans, &child_obj_loc);
 
-	BSON_APPEND_DOCUMENT_BEGIN(doc, "quat", &child_obj_rot);
+	BSON_APPEND_DOCUMENT_BEGIN(&child_obj_trans, "rotation", &child_obj_rot);
 	BSON_APPEND_DOUBLE(&child_obj_rot, "x", Pose.GetRotation().X);
 	BSON_APPEND_DOUBLE(&child_obj_rot, "y", Pose.GetRotation().Y);
 	BSON_APPEND_DOUBLE(&child_obj_rot, "z", Pose.GetRotation().Z);
 	BSON_APPEND_DOUBLE(&child_obj_rot, "w", Pose.GetRotation().W);
-	bson_append_document_end(doc, &child_obj_rot);
+	bson_append_document_end(&child_obj_trans, &child_obj_rot);
 
-	bson_t child_pose;
-	char buf[16];
-	const char* key;
-	size_t keylen;
+	//bson_t child_pose;
+	//char buf[16];
+	//const char* key;
+	//size_t keylen;
 
+	bson_append_document_end(doc, &child_obj_trans);
 	// Write pose as array of [x y z qx qy qz qw]
-	BSON_APPEND_ARRAY_BEGIN(doc, "pose", &child_pose);
-		// x
-		keylen = bson_uint32_to_string(0, &key, buf, sizeof buf);
-		bson_append_double(&child_pose, key, (int)keylen, Pose.GetLocation().X);
-		// y
-		keylen = bson_uint32_to_string(1, &key, buf, sizeof buf);
-		bson_append_double(&child_pose, key, (int)keylen, Pose.GetLocation().Y);
-		// z
-		keylen = bson_uint32_to_string(2, &key, buf, sizeof buf);
-		bson_append_double(&child_pose, key, (int)keylen, Pose.GetLocation().Z);
-		// qx
-		keylen = bson_uint32_to_string(3, &key, buf, sizeof buf);
-		bson_append_double(&child_pose, key, (int)keylen, Pose.GetRotation().X);
-		// qy
-		keylen = bson_uint32_to_string(4, &key, buf, sizeof buf);
-		bson_append_double(&child_pose, key, (int)keylen, Pose.GetRotation().Y);
-		// qz
-		keylen = bson_uint32_to_string(5, &key, buf, sizeof buf);
-		bson_append_double(&child_pose, key, (int)keylen, Pose.GetRotation().Z);
-		// qw
-		keylen = bson_uint32_to_string(6, &key, buf, sizeof buf);
-		bson_append_double(&child_pose, key, (int)keylen, Pose.GetRotation().W);
-	bson_append_array_end(doc, &child_pose);
+	//BSON_APPEND_ARRAY_BEGIN(doc, "pose", &child_pose);
+	//	// x
+	//	keylen = bson_uint32_to_string(0, &key, buf, sizeof buf);
+	//	bson_append_double(&child_pose, key, (int)keylen, Pose.GetLocation().X);
+	//	// y
+	//	keylen = bson_uint32_to_string(1, &key, buf, sizeof buf);
+	//	bson_append_double(&child_pose, key, (int)keylen, Pose.GetLocation().Y);
+	//	// z
+	//	keylen = bson_uint32_to_string(2, &key, buf, sizeof buf);
+	//	bson_append_double(&child_pose, key, (int)keylen, Pose.GetLocation().Z);
+	//	// qx
+	//	keylen = bson_uint32_to_string(3, &key, buf, sizeof buf);
+	//	bson_append_double(&child_pose, key, (int)keylen, Pose.GetRotation().X);
+	//	// qy
+	//	keylen = bson_uint32_to_string(4, &key, buf, sizeof buf);
+	//	bson_append_double(&child_pose, key, (int)keylen, Pose.GetRotation().Y);
+	//	// qz
+	//	keylen = bson_uint32_to_string(5, &key, buf, sizeof buf);
+	//	bson_append_double(&child_pose, key, (int)keylen, Pose.GetRotation().Z);
+	//	// qw
+	//	keylen = bson_uint32_to_string(6, &key, buf, sizeof buf);
+	//	bson_append_double(&child_pose, key, (int)keylen, Pose.GetRotation().W);
+	//bson_append_array_end(doc, &child_pose);
 }
 
 // Write the bson doc to the meta_coll
@@ -740,7 +819,7 @@ int32 FSLWorldStateDBHandler::AddIndividualsMetadata(ASLIndividualManager* Indiv
 		BSON_APPEND_DOCUMENT_BEGIN(&arr_obj, idx_key, &individual_obj);
 
 			// Id
-			BSON_APPEND_UTF8(&individual_obj, "id", TCHAR_TO_UTF8(*Individual->GetIdValue()));
+			BSON_APPEND_UTF8(&individual_obj, "frame_id", TCHAR_TO_UTF8(*Individual->GetParentActor()->GetHumanReadableName())); // was GetIdValue
 			// Class
 			BSON_APPEND_UTF8(&individual_obj, "class", TCHAR_TO_UTF8(*Individual->GetClassValue()));
 		
@@ -793,7 +872,7 @@ bool FSLWorldStateDBHandler::CreateIndexes() const
 	
 	bson_t idx_ts;
 	bson_init(&idx_ts);
-	BSON_APPEND_INT32(&idx_ts, "timestamp", 1);
+	BSON_APPEND_INT32(&idx_ts, "stamp", 1);
 	char* idx_ts_chr = mongoc_collection_keys_to_index_string(&idx_ts);
 
 	bson_t idx_individuals_id;
@@ -803,7 +882,7 @@ bool FSLWorldStateDBHandler::CreateIndexes() const
 
 	bson_t idx_skel_individuals_id;
 	bson_init(&idx_skel_individuals_id);
-	BSON_APPEND_INT32(&idx_skel_individuals_id, "skel_individuals.id", 1);
+	BSON_APPEND_INT32(&idx_skel_individuals_id, "skeletal_individuals.id", 1);
 	char* idx_skel_individuals_id_chr = mongoc_collection_keys_to_index_string(&idx_skel_individuals_id);
 
 	index_command = BCON_NEW("createIndexes",

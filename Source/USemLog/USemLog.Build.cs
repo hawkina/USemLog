@@ -71,7 +71,7 @@ public class USemLog : ModuleRules
 				//"Landscape", "AIModule",	// whitelisted actors when setting the world to visual only
 				//"UConversions",				// SL_WITH_ROS_CONVERSIONS
 				"UMCGrasp",					// SL_WITH_MC_GRASP
-				"SRanipal",					// SL_WITH_EYE_TRACKING
+				//"SRanipal",					// SL_WITH_EYE_TRACKING
 				//"SlicingLogic",		    // SL_WITH_SLICING				
 				//"MongoCxx",			    // SL_WITH_LIBMONGO_CXX				
 				//"Boost",				    // SL_WITH_BOOST			
@@ -105,7 +105,7 @@ public class USemLog : ModuleRules
 		SetDependencyPrepreocessorDefinition("UMCGrasp", "SL_WITH_MC_GRASP");
 		SetDependencyPrepreocessorDefinition("MongoC", "SL_WITH_LIBMONGO_C");
 		SetDependencyPrepreocessorDefinition("MongoCxx", "SL_WITH_LIBMONGO_CXX");
-		SetDependencyPrepreocessorDefinition("SRanipal", "SL_WITH_EYE_TRACKING");
+		//SetDependencyPrepreocessorDefinition("SRanipal", "SL_WITH_EYE_TRACKING");
 		SetDependencyPrepreocessorDefinition("SlicingLogic", "SL_WITH_SLICING");
 		SetDependencyPrepreocessorDefinition("UProtobuf", "SL_WITH_PROTO");
 		SetDependencyPrepreocessorDefinition("UROSBridge", "SL_WITH_ROSBRIDGE");

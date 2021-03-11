@@ -525,7 +525,7 @@ void FSLVisionDBHandler::WriteFrame(const FSLVisionFrameData& Frame) const
 				BSON_APPEND_DOCUMENT_BEGIN(&imgs_arr, k_key, &imgs_arr_obj);
 
 				BSON_APPEND_UTF8(&imgs_arr_obj, "type", TCHAR_TO_UTF8(*Img.Type));
-				BSON_APPEND_OID(&imgs_arr_obj, "file_id", (const bson_oid_t*)&file_oid);
+				//BSON_APPEND_OID(&imgs_arr_obj, "file_id", (const bson_oid_t*)&file_oid);
 
 				bson_append_document_end(&imgs_arr, &imgs_arr_obj);
 				k++;

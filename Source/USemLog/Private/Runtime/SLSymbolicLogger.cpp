@@ -4,12 +4,13 @@
 #include "Runtime/SLSymbolicLogger.h"
 #include "Individuals/SLIndividualManager.h"
 #include "Individuals/SLIndividualComponent.h"
+#include "Individuals/SLIndividualUtils.h" 
 
 #include "Utils/SLUuid.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
-//#include "Misc/Paths.h"
-//#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Misc/FileHelper.h"
 #include "Engine/Engine.h"
 #include "GameFramework/PlayerController.h"
 #include "Components/InputComponent.h"
@@ -333,6 +334,183 @@ void ASLSymbolicLogger::StartImpl()
 		*FString(__FUNCTION__), __LINE__, *GetName(), GetWorld()->GetTimeSeconds());
 }
 
+
+void ASLSymbolicLogger::GetIndividuals(FString Ev, FString &Indiv1, FString &Indiv2, FString &Indiv1Class, FString &Indiv2Class) {
+	FString temp;
+	int32 indexS;
+	int32 indexE;
+
+	//get first Individual
+	Ev.FindChar('[', indexS);
+	Ev.FindChar(']', indexE);
+	temp = Ev.Mid((indexS + 1), (indexE - indexS)); //get the full individual
+	indexS = temp.Find("ParentActor=", ESearchCase::IgnoreCase, ESearchDir::FromStart, 0);
+	temp.FindChar(';', indexE);
+
+	Indiv1 = temp.Mid((indexS + 12), (indexE - (indexS + 12))); // +12 = char amount of "ParentActor="
+
+	//Get Class of first Individual
+	indexS = temp.Find("Class=", ESearchCase::IgnoreCase, ESearchDir::FromStart, 0);
+	temp.FindLastChar(';', indexE);
+	Indiv1Class = temp.Mid((indexS + 6), (indexE - (indexS + 6))); // = char amount of "Class="
+
+	//Get second individual
+	Ev.FindLastChar('[', indexS);
+	Ev.FindLastChar(']', indexE);
+	temp = Ev.Mid((indexS + 1), (indexE - indexS)); //get the full individual
+	indexS = temp.Find("ParentActor=", ESearchCase::IgnoreCase, ESearchDir::FromStart, 0);
+	temp.FindChar(';', indexE);
+
+	Indiv2 = temp.Mid((indexS + 12), (indexE - (indexS + 12)));
+
+	//Get Class of second Individual
+	//Get Class of first Individual
+	indexS = temp.Find("Class=", ESearchCase::IgnoreCase, ESearchDir::FromStart, 0);
+	temp.FindLastChar(';', indexE);
+	Indiv2Class = temp.Mid((indexS + 6), (indexE - (indexS + 6))); // = char amount of "Class="
+}
+
+//iterate over all individuals in the world and write them to a String in the correct json format
+FString AllWorldIndividuals(UWorld* World) {
+	// Iterate individuals from the world
+	FString temp;
+	for (TActorIterator<AActor> ActItr(World); ActItr; ++ActItr)
+	{
+		if (USLBaseIndividual* BI = FSLIndividualUtils::GetIndividualObject(*ActItr))
+		{
+			//FSLOwlSemMapDocUtils::AddIndividual(SemMapOwlDoc, BI);
+			//temp.Append(BI->GetClassValue()); // SoupSpoon
+			//temp.Append(BI->GetName()); //SLRigidIndividual_0
+			//temp.Append(BI->GetIdValue()); //CoDFZCpfYEufMO7oJHMWIw
+			//temp.Append(BI->GetParentActor()->GetHumanReadableName()); //SM_SoupSpoon_41
+
+			//define Named Individual
+			temp.Append("{\"s\": \"http://www.ease-crc.org/ont/SOMA.owl#");
+			temp.Append(BI->GetParentActor()->GetHumanReadableName());
+			//temp.Append(BI->GetName());
+			temp.Append("\", \"p\": \"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\",");
+			temp.Append("\"o\": \"http://www.w3.org/2002/07/owl#NamedIndividual\", ");
+			temp.Append("\"graph\": \"user\" }, \n");
+
+			//define the individual as Object of Class
+			temp.Append("{\"s\": \"http://www.ease-crc.org/ont/SOMA.owl#");
+			temp.Append(BI->GetParentActor()->GetHumanReadableName());
+			//temp.Append(BI->GetName());
+			temp.Append("\", \"p\": \"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\",");
+			temp.Append("\"o\": \"http://www.ease-crc.org/ont/SOMA.owl#");
+			temp.Append(BI->GetClassValue());
+			temp.Append("\", \"graph\": \"user\" }, \n");
+		}
+	}
+	return temp;
+}
+//---------------Building JSON Utils-------------------------------
+// define Individual
+// id = Ev->Id (Event ID)
+// subject = http://www.ease-crc.org/ont/SOMA.owl#SupportState_ (Or any other link to Soma) 
+FString NamedIndividual(FString id, FString subject) {
+	FString eventJson;
+	eventJson.Append("{\"s\": \"");
+	eventJson.Append(subject);
+	eventJson.Append("_");
+	eventJson.Append(id);
+	eventJson.Append("\", \"p\": \"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\",");
+	eventJson.Append("\"o\": \"http://www.w3.org/2002/07/owl#NamedIndividual\", ");
+	eventJson.Append("\"graph\": \"user\" }, \n");
+	return eventJson;
+}
+
+//define the specific object of a certain type (maybe the correct term is entity?)
+//related via type
+//id of the Event
+//subject = http://www.ease-crc.org/ont/SOMA.owl#SupportState
+FString SubjectOfTypeObject(FString id, FString subject) {
+	FString eventJson;
+	eventJson.Append("{\"s\": \"");
+	eventJson.Append(subject);
+	eventJson.Append("_");
+	eventJson.Append(id);
+	eventJson.Append("\", \"p\": \"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\",");
+	eventJson.Append("\"o\": \"");
+	eventJson.Append(subject);
+	eventJson.Append("\", \"graph\": \"user\"}, \n");
+	return eventJson;
+}
+
+//Define the individual of an Event via Classifinies relation. 
+//Generates a string that describes a role classifying an object
+//id = Ev->Id (Event ID)
+//individual = NameOfIndividual
+//individualRole = http://www.ease-crc.org/ont/SOMA.owl#Supporter_ (The role of the individual in event)
+FString RoleIndividualClassifies(FString id, FString individual, FString individualRole ){
+	FString eventJson;
+	eventJson.Append("{\"s\": \"");
+	eventJson.Append(individualRole);
+	eventJson.Append("_");
+	eventJson.Append(id);
+	eventJson.Append("\", \"p\": \"http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#classifies\",");
+	eventJson.Append("\"o\": \"http://www.ease-crc.org/ont/SOMA.owl#");
+	eventJson.Append(individual);
+	eventJson.Append("\", \"graph\": \"user\" }, \n");
+	return eventJson;
+}
+
+//Defines the Time interval of an Event/State/Action
+//subject = http://www.ease-crc.org/ont/SOMA.owl#State_
+//startTime = Ev->StartTime (floats directly is fine)
+FString TimeIntervalOfSomething(FString id, FString subject, float startTime, float endTime) {
+	FString eventJson;
+
+	eventJson = NamedIndividual(id, "http://www.ease-crc.org/ont/SOMA.owl#TimeInterval");
+	eventJson.Append(SubjectOfTypeObject(id, "http://www.ease-crc.org/ont/SOMA.owl#TimeInterval"));
+
+	eventJson.Append("{\"s\": \"");
+	eventJson.Append(subject);
+	eventJson.Append("_");
+	eventJson.Append(id);
+	eventJson.Append("\", \"p\": \"http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#hasTimeInterval\",");
+	eventJson.Append("\"o\": \"http://www.ease-crc.org/ont/SOMA.owl#TimeInterval_");
+	eventJson.Append(id);
+	eventJson.Append("\", \"graph\": \"user\" }, \n");
+
+	//start time
+	eventJson.Append("{\"s\": \"http://www.ease-crc.org/ont/SOMA.owl#TimeInterval_");
+	eventJson.Append(id);
+	eventJson.Append("\", \"p\": \"http://www.ease-crc.org/ont/SOMA.owl#hasIntervalBegin\",");
+	eventJson.Append("\"o\": { \"$numberDecimal\": \"");
+	eventJson.Append(FString::SanitizeFloat(startTime));
+	eventJson.Append("\" }, ");
+	eventJson.Append("\"graph\": \"user\" }, \n");
+
+	//end time
+	eventJson.Append("{\"s\": \"http://www.ease-crc.org/ont/SOMA.owl#TimeInterval_");
+	eventJson.Append(id);
+	eventJson.Append("\", \"p\": \"http://www.ease-crc.org/ont/SOMA.owl#hasIntervalEnd\",");
+	eventJson.Append("\"o\": { \"$numberDecimal\": \"");
+	eventJson.Append(FString::SanitizeFloat(endTime));
+	eventJson.Append("\" }, ");
+	eventJson.Append("\"graph\": \"user\" }, \n");
+
+	return eventJson;
+}
+
+FString GenerateTriple(FString const& s, FString const& p, FString const& o) {
+	FString eventJson;
+	eventJson.Append("{\"s\": \"");
+	eventJson.Append(s);
+	eventJson.Append("\", \"p\": \"");
+	eventJson.Append(p);
+	eventJson.Append("\", \"o\": \"");
+	eventJson.Append(o);
+	eventJson.Append("\", \"graph\": \"user\"}, \n");
+	return eventJson;
+}
+
+
+
+
+//---------------End Building JSON Utils---------------------------
+
 // Finish logger (called when the logger is used independently) (bForced is true if called from destructor)
 void ASLSymbolicLogger::FinishImpl(bool bForced)
 {
@@ -420,6 +598,8 @@ void ASLSymbolicLogger::FinishImpl(bool bForced)
 
 		// Add experiment individual to doc	(metadata)	
 		ExperimentDoc->AddExperimentIndividual(SubActionIds, LocationParameters.SemanticMapId, LocationParameters.TaskId);
+	
+		
 	}
 
 	// Write events to file
@@ -433,8 +613,221 @@ void ASLSymbolicLogger::FinishImpl(bool bForced)
 	bIsStarted = false;
 	bIsInit = false;
 	bIsFinished = true;
-	UE_LOG(LogTemp, Warning, TEXT("%s::%d Symbolic logger (%s) succesfully finished at %.2f.."),
-		*FString(__FUNCTION__), __LINE__, *GetName(), GetWorld()->GetTimeSeconds());
+
+	//UE_LOG(LogTemp, Warning, TEXT("%s::%d Symbolic logger (%s) succesfully finished at %.2f.."),
+	//	*FString(__FUNCTION__), __LINE__, *GetName(), GetWorld()->GetTimeSeconds());
+
+	//generate .json file
+	FString FullPath;
+	FullPath.Append(FPaths::ProjectDir() + "/" + "SL/Tasks/");
+	FullPath.Append("TestFile.json"); //Maybe replace with proper filename
+	FPaths::RemoveDuplicateSlashes(FullPath); //just in case
+
+	//generate string to write.
+	FString eventJson = "[";
+
+	//Define Episode and Episode ID at the beginning of the file
+	eventJson.Append("{\"s\": \"http://www.ease-crc.org/ont/SOMA.owl#Episode_");
+	eventJson.Append(FinishedEvents[0].Get()->EpisodeId); //Episode ID is general so the Event does not matter
+	eventJson.Append("\", \"p\": \"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\",");
+	eventJson.Append("\"o\": \"http://www.ease-crc.org/ont/SOMA.owl#Episode\",");
+	eventJson.Append("\"graph\": \"user\" }, \n");
+
+	//Define Episode as an Individual of?
+	eventJson.Append("{\"s\": \"http://www.ease-crc.org/ont/SOMA.owl#Episode_");
+	eventJson.Append(FinishedEvents[0].Get()->EpisodeId);
+	eventJson.Append("\", \"p\": \"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\",");
+	eventJson.Append("\"o\": \"http://www.w3.org/2002/07/owl#NamedIndividual\",");
+	eventJson.Append("\"graph\": \"user\" }, \n");
+
+	eventJson.Append(AllWorldIndividuals(GetWorld())); // add All Objects as named individuals and their respective classes
+
+	TArray<FString> SubActionIds;
+	for (const auto& Ev : FinishedEvents)
+	{	
+		Ev->AddToOwlDoc(ExperimentDoc.Get()); //TODO probably not needed?
+		SubActionIds.Add(Ev->Id); //TODO probably not needed?
+
+		///----------------Supported By-------------------------------------------------------
+		if (Ev->TypeName() == "SupportedBy") {
+			//----------------SUPPORTEDBY-----------------
+			//define Individual
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#SupportState"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#SupportState"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#State"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, FString("State_") + Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#SupportState"));
+
+			//define Individual for state
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#State"));
+			//define defines
+			GenerateTriple(FString("http://www.ease-crc.org/ont/SOMA.owl#SupportState_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#defines", FString("http://www.ease-crc.org/ont/SOMA.owl#Supporter_") + Ev->Id);
+			//define defines
+			GenerateTriple(FString("http://www.ease-crc.org/ont/SOMA.owl#SupportState_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#defines", FString("http://www.ease-crc.org/ont/SOMA.owl#SupportedObject_") + Ev->Id);
+
+			//parse string to get individuals
+			FString ind1, ind2, indc1, indc2;
+			GetIndividuals(Ev->ToString(), ind1, ind2, indc1, indc2);
+
+			//define Supporter
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Supporter"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Supporter"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, ind2, "http://www.ease-crc.org/ont/SOMA.owl#Supporter"));
+
+			//define Supported
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#SupportedObject"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#SupportedObject"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, ind1, "http://www.ease-crc.org/ont/SOMA.owl#SupportedObject"));
+
+			//define Time Interval
+			eventJson.Append(TimeIntervalOfSomething(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#State", Ev->StartTime, Ev->EndTime));
+		}
+		else if (Ev->TypeName() == "Contact") {
+			//---------CONTACT--------------------
+			//define Individual
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#ContactState"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#ContactState"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#State"));
+
+			//define Individual for state
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#State"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, FString("State_") + Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#ContactState"));
+
+			//define defines
+			GenerateTriple(FString("http://www.ease-crc.org/ont/SOMA.owl#ContactState_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#defines", FString("http://www.ease-crc.org/ont/SOMA.owl#Patient_") + Ev->Id);
+
+			//parse string to get individuals
+			FString ind1, ind2, indc1, indc2;
+			GetIndividuals(Ev->ToString(), ind1, ind2, indc1, indc2);
+
+			//define Patient (Object2)
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, ind2, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+
+			//define Patient (Object1)
+			//eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			//eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, ind1, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+
+			//define Time Interval
+			eventJson.Append(TimeIntervalOfSomething(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#State", Ev->StartTime, Ev->EndTime));
+
+
+		} else if (Ev->TypeName() == "Grasp") {
+			// ---------- GRASPING ----------------
+			//define Individual
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Grasping"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Grasping"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action"));
+
+			//define Individual for state
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action"));
+
+			GenerateTriple(FString("http://www.ease-crc.org/ont/SOMA.owl#Grasping_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#classifies", FString("http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action_") + Ev->Id);
+			GenerateTriple(FString("http://www.ease-crc.org/ont/SOMA.owl#Grasping_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#defines", FString("http://www.ease-crc.org/ont/SOMA.owl#Patient_") + Ev->Id);
+
+			GenerateTriple(FString("http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#executesTask", FString("http://www.ease-crc.org/ont/SOMA.owl#Grasping_") + Ev->Id);
+			
+			//parse string to get individuals
+			FString ind1, ind2, indc1, indc2;
+			GetIndividuals(Ev->ToString(), ind1, ind2, indc1, indc2);
+
+			//define Patient (Object2 which gets grasped)
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, ind2, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+
+			//define Agent (Object1)
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#AgentRole"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#AgentRole"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, ind1, "http://www.ease-crc.org/ont/SOMA.owl#AgentRole"));
+
+			//define Time Interval
+			eventJson.Append(TimeIntervalOfSomething(Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action", Ev->StartTime, Ev->EndTime));
+		
+		}
+		else if (Ev->TypeName() == "Reach") {
+			//-----------REACH------------------
+						// ---------- GRASPING ----------------
+			//define Individual
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Reaching"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Reaching"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action"));
+
+			//define Individual for state
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action"));
+
+			GenerateTriple(FString("http://www.ease-crc.org/ont/SOMA.owl#Reaching_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#classifies", FString("http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action_") + Ev->Id);
+			GenerateTriple(FString("http://www.ease-crc.org/ont/SOMA.owl#Reaching_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#defines", FString("http://www.ease-crc.org/ont/SOMA.owl#Patient_") + Ev->Id);
+
+			GenerateTriple(FString("http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#executesTask", FString("http://www.ease-crc.org/ont/SOMA.owl#Reaching_") + Ev->Id);
+
+			//parse string to get individuals
+			FString ind1, ind2, indc1, indc2;
+			GetIndividuals(Ev->ToString(), ind1, ind2, indc1, indc2);
+
+			//define Patient (Object2 which gets grasped)
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, ind2, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+
+			//define Agent (Object1)
+			eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#AgentRole"));
+			eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#AgentRole"));
+			eventJson.Append(RoleIndividualClassifies(Ev->Id, ind1, "http://www.ease-crc.org/ont/SOMA.owl#AgentRole"));
+
+			//define Time Interval
+			eventJson.Append(TimeIntervalOfSomething(Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action", Ev->StartTime, Ev->EndTime));
+
+		}
+		else if (Ev->TypeName() == "PreGrasp") {
+			////---------------PREGRASP---------------------------------
+			////define Individual
+			//eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Grasping"));
+			//eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Grasping"));
+			//eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action"));
+
+			////define Individual for state
+			//eventJson.Append(NamedIndividual(Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action"));
+
+			//GenerateTriple(FString("http://www.ease-crc.org/ont/SOMA.owl#Grasping_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#classifies", FString("http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action_") + Ev->Id);
+			//GenerateTriple(FString("http://www.ease-crc.org/ont/SOMA.owl#Grasping_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#defines", FString("http://www.ease-crc.org/ont/SOMA.owl#Patient_") + Ev->Id);
+
+			//GenerateTriple(FString("http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action_") + Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#executesTask", FString("http://www.ease-crc.org/ont/SOMA.owl#Grasping_") + Ev->Id);
+
+			////parse string to get individuals
+			//FString ind1, ind2, indc1, indc2;
+			//GetIndividuals(Ev->ToString(), ind1, ind2, indc1, indc2);
+
+			////define Patient (Object2 which gets grasped)
+			//eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			//eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+			//eventJson.Append(RoleIndividualClassifies(Ev->Id, ind2, "http://www.ease-crc.org/ont/SOMA.owl#Patient"));
+
+			////define Agent (Object1)
+			//eventJson.Append(NamedIndividual(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#AgentRole"));
+			//eventJson.Append(SubjectOfTypeObject(Ev->Id, "http://www.ease-crc.org/ont/SOMA.owl#AgentRole"));
+			//eventJson.Append(RoleIndividualClassifies(Ev->Id, ind1, "http://www.ease-crc.org/ont/SOMA.owl#AgentRole"));
+
+			////define Time Interval
+			//eventJson.Append(TimeIntervalOfSomething(Ev->Id, "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#Action", Ev->StartTime, Ev->EndTime));
+
+		}
+		else {
+		//----DEBUGGING------
+			//eventJson.Append("Rest: \n");
+			//eventJson.Append(Ev->TypeName());
+			//eventJson.Append("\n");
+			//eventJson.Append(Ev->ToString());
+		}
+	}
+	//eventJson.Append("\n \n \n \n");
+	//eventJson.Append(ExperimentDoc.Get()->ToString()); //ExperimentDoc->ToString()
+	
+
+	//this works
+	eventJson.Append("]");
+	FFileHelper::SaveStringToFile(eventJson, *FullPath);
 }
 
 // Bind user inputs
